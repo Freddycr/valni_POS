@@ -1,0 +1,49 @@
+{
+  "name": "gestión-de-ventas-celular",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:semantic": "node --test agent/semantic-query-service/__tests__/semantic-query-service.test.js agent/semantic-query-service/__tests__/semantic-query-service.phase5.test.js",
+    "semantic:server": "node agent/semantic-query-service/server.js",
+    "playbook:f0": "node scripts/playbook/f0_preflight.mjs",
+    "playbook:f1": "node scripts/playbook/f1_extract_snapshot.mjs",
+    "playbook:f23": "node scripts/playbook/f2f3_load_snapshot.mjs",
+    "playbook:f4": "node scripts/playbook/f4_reconcile.mjs",
+    "playbook:f5": "node scripts/playbook/f5_qa_operaciones.mjs",
+    "playbook:f6": "node scripts/playbook/f6_cutover_gate.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.95.3",
+    "firebase-admin": "^13.6.1",
+    "firebase-functions": "^7.0.5",
+    "firebase-tools": "^15.6.0",
+    "jwt-decode": "4.0.0",
+    "pg": "^8.19.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-is": "^19.2.4",
+    "recharts": "^3.7.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^25.2.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/testing-library__jest-dom": "^5.14.9",
+    "autoprefixer": "^10.4.24",
+    "express": "^5.2.1",
+    "jsdom": "^29.0.1",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.1.0"
+  }
+}

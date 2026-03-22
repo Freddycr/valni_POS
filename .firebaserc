@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "registroventas-466719"
+  },
+  "targets": {
+    "registroventas-466719": {
+      "hosting": {
+        "valni": [
+          "valni"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

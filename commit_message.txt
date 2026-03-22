@@ -1,0 +1,20 @@
+feat: Implement printing logic and update daily report details
+
+This commit introduces a robust printing solution and enhances the daily report module.
+
+- **Printing Logic:**
+  - Implemented iframe-based printing directly within the `Receipt` component for both sales and daily report modules, replacing previous unreliable methods.
+  - Ensured correct print formatting by inlining CSS and explicitly setting dimensions for thermal printers (80mm).
+  - Removed conflicting `@media print` styles from `Receipt.css`.
+
+- **Daily Report Module:**
+  - Restored detailed sales view, including product, IMEI, and payment methods, resolving the issue where only seller totals were visible.
+  - Added a "Print Receipt" button next to each sale record in the detailed sales table, allowing duplicate receipt generation.
+  - Updated Firebase Cloud Function (`getDailyReportData`) to return all necessary sales details (products, users, details, payments, customers) as expected by the frontend.
+  - Corrected type definitions in `services/functionsApi.ts` to reflect the comprehensive data returned by `getDailyReportData`.
+
+- **Bug Fixes:**
+  - Resolved a critical blank screen issue after login, which was caused by an introduced syntax error in `SalesForm.tsx` during prior refactoring attempts.
+  - Addressed a deployment timeout issue for Firebase Functions by removing verbose console logging of large data objects.
+
+These changes provide a consistent, functional, and user-friendly experience for printing receipts and viewing detailed daily sales reports.

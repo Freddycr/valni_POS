@@ -1,0 +1,38 @@
+services:
+  semantic-query-service:
+    build:
+      context: ..
+      dockerfile: agent/semantic-query-service/Dockerfile
+    container_name: valni-semantic-query-service
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      SEMANTIC_QUERY_PORT: 8787
+      SEMANTIC_MAX_LIMIT: ${SEMANTIC_MAX_LIMIT:-500}
+      SEMANTIC_TIMEOUT_MS: ${SEMANTIC_TIMEOUT_MS:-5000}
+      SEMANTIC_CACHE_ENABLED: ${SEMANTIC_CACHE_ENABLED:-true}
+      SEMANTIC_CACHE_TTL_MS: ${SEMANTIC_CACHE_TTL_MS:-30000}
+      SEMANTIC_CACHE_MAX_ENTRIES: ${SEMANTIC_CACHE_MAX_ENTRIES:-200}
+    ports:
+      - "${SEMANTIC_PUBLIC_PORT:-8787}:8787"
+    restart: unless-stopped
+
+  klisk-agent:
+    build:
+      context: ../agent/valni-semantic-agent
+      dockerfile: Dockerfile
+    container_name: valni-klisk-agent
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      AGENT_MODEL: ${AGENT_MODEL:-openrouter/google/gemini-2.0-flash-001}
+      SEMANTIC_SERVICE_URL: ${SEMANTIC_SERVICE_URL:-http://semantic-query-service:8787/semantic-query}
+      BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-America/Lima}
+      DEFAULT_COMPANY_ID: ${DEFAULT_COMPANY_ID:-}
+      KLISK_API_KEY: ${KLISK_API_KEY:-}
+      KLISK_CHAT_KEY: ${KLISK_CHAT_KEY:-}
+      KLISK_WIDGET_KEY: ${KLISK_WIDGET_KEY:-}
+    ports:
+      - "${KLISK_PUBLIC_PORT:-8080}:8080"
+    depends_on:
+      - semantic-query-service
+    restart: unless-stopped

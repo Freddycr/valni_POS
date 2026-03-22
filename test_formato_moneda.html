@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Prueba de Formato de Moneda</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .test-case {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    .test-case h3 {
+      margin-top: 0;
+      color: #333;
+    }
+    
+    .result {
+      font-weight: bold;
+      color: #2c5282;
+    }
+    
+    .error {
+      color: #e53e3e;
+      font-weight: bold;
+    }
+    
+    code {
+      background-color: #f0f0f0;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Prueba de Formato de Moneda</h1>
+    <p>Esta prueba verifica que la función de formato de moneda funcione correctamente con diferentes tipos de valores.</p>
+    
+    <div class="test-case">
+      <h3>Test 1: Números válidos</h3>
+      <p>Entrada: <code>1250.50</code></p>
+      <p>Resultado: <span class="result" id="test1"></span></p>
+    </div>
+    
+    <div class="test-case">
+      <h3>Test 2: Cero</h3>
+      <p>Entrada: <code>0</code></p>
+      <p>Resultado: <span class="result" id="test2"></span></p>
+    </div>
+    
+    <div class="test-case">
+      <h3>Test 3: Valores decimales</h3>
+      <p>Entrada: <code>85.75</code></p>
+      <p>Resultado: <span class="result" id="test3"></span></p>
+    </div>
+    
+    <div class="test-case">
+      <h3>Test 4: Valores inválidos (NaN)</h3>
+      <p>Entrada: <code>"no-es-un-numero"</code></p>
+      <p>Resultado: <span class="result" id="test4"></span></p>
+    </div>
+    
+    <div class="test-case">
+      <h3>Test 5: Valores nulos</h3>
+      <p>Entrada: <code>null</code></p>
+      <p>Resultado: <span class="result" id="test5"></span></p>
+    </div>
+  </div>
+
+  <script>
+    // Función de formato de moneda (similar a la del proyecto)
+    const formatCurrency = (amount) => {
+      const options = {
+        style: 'currency',
+        currency: 'PEN',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      };
+      return new Intl.NumberFormat('es-PE', options).format(amount);
+    };
+    
+    // Funciones de conversión con manejo de errores
+    const safeParseFloat = (value) => {
+      if (typeof value === 'number') return value;
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+    
+    const safeParseInt = (value) => {
+      if (typeof value === 'number') return value;
+      const parsed = parseInt(value);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+    
+    // Ejecutar tests
+    document.getElementById('test1').textContent = formatCurrency(1250.50);
+    document.getElementById('test2').textContent = formatCurrency(0);
+    document.getElementById('test3').textContent = formatCurrency(85.75);
+    document.getElementById('test4').textContent = formatCurrency(safeParseFloat("no-es-un-numero"));
+    document.getElementById('test5').textContent = formatCurrency(safeParseFloat(null));
+    
+    // Mostrar advertencia si hay NaN
+    const results = [
+      formatCurrency(1250.50),
+      formatCurrency(0),
+      formatCurrency(85.75),
+      formatCurrency(safeParseFloat("no-es-un-numero")),
+      formatCurrency(safeParseFloat(null))
+    ];
+    
+    results.forEach((result, index) => {
+      if (result.includes('NaN')) {
+        document.getElementById(`test${index + 1}`).classList.add('error');
+        document.getElementById(`test${index + 1}`).textContent += ' (¡ERROR: Valor NaN detectado!)';
+      }
+    });
+  </script>
+</body>
+</html>

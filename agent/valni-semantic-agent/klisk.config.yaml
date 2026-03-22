@@ -1,0 +1,27 @@
+entry: src/main.py
+name: "valni-semantic-agent"
+studio:
+  port: 3000
+api:
+  port: 8321
+deploy:
+  chat:
+    enabled: true
+    title: ""
+    welcome_message: ""
+    attachments: true
+  widget:
+    enabled: true
+    color: "#2563eb"
+    position: bottom-right
+    width: 380px
+    height: 560px
+    welcome_message: ""
+    placeholder: "Type a message..."
+    auto_open: false
+    user_message_color: "#2563eb"
+    header_color: ""
+    bubble_icon: "chat"
+  api:
+    cors_origins:
+      - "*"

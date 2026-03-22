@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Prueba Completa de Recibo con Datos de Ejemplo</title>
+  <link rel="stylesheet" type="text/css" href="./Receipt.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .description {
+      max-width: 800px;
+      background: #e8f4fd;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    .description h1 {
+      color: #2c5282;
+      text-align: center;
+    }
+
+    .test-container {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .receipt-preview {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .receipt-container {
+      font-family: 'monospace', sans-serif;
+      width: 280px;
+      padding: 10px;
+      color: #000;
+      background-color: #fff;
+      font-size: 12px;
+      line-height: 1.4;
+      border: 1px dashed #ccc;
+    }
+
+    .receipt-section {
+      margin-bottom: 12px;
+    }
+
+    .divider {
+      border-top: 1px dashed #000;
+      margin: 8px 0;
+    }
+
+    .section-title {
+      font-weight: bold;
+      text-align: center;
+      margin: 6px 0;
+      text-transform: uppercase;
+      font-size: 11px;
+    }
+
+    .receipt-header p {
+      text-align: center;
+      margin: 3px 0;
+      font-size: 11px;
+    }
+
+    .receipt-header .company-details {
+      text-align: center;
+      margin-bottom: 8px;
+      font-size: 11px;
+    }
+
+    .receipt-header .order-number {
+      font-size: 12px;
+      font-weight: bold;
+      margin-top: 6px;
+      text-align: center;
+    }
+
+    .customer-details p {
+      margin: 3px 0;
+      font-size: 11px;
+    }
+
+    .receipt-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0;
+    }
+
+    .receipt-body th,
+    .receipt-body td {
+      border-bottom: 1px dashed #000;
+      padding: 4px 0;
+      font-size: 11px;
+      text-align: left;
+    }
+
+    .receipt-body .item-detail {
+      font-size: 10px;
+      margin: 2px 0;
+    }
+
+    .receipt-body .item-details-row td {
+      padding-top: 2px;
+      border-top: none;
+      font-size: 10px;
+      color: #555;
+    }
+
+    .receipt-body th:nth-child(2),
+    .receipt-body td:nth-child(2) {
+      text-align: center;
+    }
+
+    .receipt-body th:nth-child(3),
+    .receipt-body td:nth-child(3),
+    .receipt-body th:nth-child(4),
+    .receipt-body td:nth-child(4) {
+      text-align: right;
+    }
+
+    .receipt-footer .total {
+      font-weight: bold;
+      font-size: 14px;
+      text-align: right;
+      margin: 8px 0;
+      padding-top: 4px;
+      border-top: 1px dashed #000;
+    }
+
+    .receipt-footer p {
+      margin: 3px 0;
+      font-size: 11px;
+    }
+
+    .receipt-footer .thank-you-message {
+      text-align: center;
+      margin-top: 12px;
+      font-style: italic;
+      font-size: 11px;
+    }
+
+    .text-bold {
+      font-weight: bold;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    .text-xs {
+      font-size: 10px;
+    }
+
+    .explanation {
+      max-width: 800px;
+      background: #fff3cd;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      border: 1px solid #ffeaa7;
+    }
+
+    .explanation h2 {
+      color: #856404;
+      margin-top: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="description">
+    <h1>Prueba Completa de Recibo con Datos de Ejemplo</h1>
+    <p>Esta prueba demuestra el funcionamiento correcto del sistema de impresión de recibos con datos de ejemplo reales.</p>
+    <p>Se han implementado las siguientes mejoras:</p>
+    <ul>
+      <li>Validación de tipos de datos para evitar valores NaN</li>
+      <li>Manejo seguro de valores numéricos</li>
+      <li>Espaciado adecuado entre secciones</li>
+      <li>Separadores visuales entre secciones</li>
+      <li>Manejo correcto de caracteres acentuados (á, é, í, ó, ú, ñ)</li>
+      <li>Diseño optimizado para impresoras de 80mm</li>
+    </ul>
+  </div>
+
+  <div class="test-container">
+    <div class="receipt-preview">
+      <h2>Recibo de Venta - Vista Previa con Datos de Ejemplo</h2>
+      <div class="receipt-container">
+        <!-- Header Section -->
+        <div class="receipt-section receipt-header">
+          <div class="company-details" style="white-space: pre-wrap;">
+TIENDA MÓVIL PERÚ S.A.C.
+Av. Tecnológica 456, Lima
+RUC: 20543216789
+          </div>
+          <div class="divider"></div>
+          <p>Fecha: 3 de setiembre de 2025, 15:30:45</p>
+          <p class="order-number">Número de Orden: <strong>VENTA-1234567890</strong></p>
+        </div>
+        
+        <!-- Customer Details Section -->
+        <div class="receipt-section customer-details">
+          <p class="section-title">Datos del Cliente</p>
+          <p>Cliente: María José Rodríguez García</p>
+          <p>Dirección: Calle Principal 789, Distrito</p>
+          <p>Teléfono: 987654321</p>
+        </div>
+        
+        <!-- Items Section -->
+        <div class="receipt-section receipt-body">
+          <p class="section-title">Detalle de Productos</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cant.</th>
+                <th>Precio</th>
+                <th>Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Teléfono Móvil Samsung A52</td>
+                <td>1</td>
+                <td>S/ 1,250.00</td>
+                <td>S/ 1,250.00</td>
+              </tr>
+              <tr class="item-details-row">
+                <td colspan="4">
+                  <p class="item-detail">IMEI 1: 123456789012345</p>
+                  <p class="item-detail">N/S: SN987654321</p>
+                </td>
+              </tr>
+              <tr>
+                <td>Cargador Rápido USB-C</td>
+                <td>2</td>
+                <td>S/ 85.50</td>
+                <td>S/ 171.00</td>
+              </tr>
+              <tr>
+                <td>Funda de Cuero para Móvil</td>
+                <td>1</td>
+                <td>S/ 125.00</td>
+                <td>S/ 125.00</td>
+              </tr>
+              <tr>
+                <td>Protector de Pantalla Templado</td>
+                <td>1</td>
+                <td>S/ 45.90</td>
+                <td>S/ 45.90</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Payment and Footer Section -->
+        <div class="receipt-section receipt-footer">
+          <p class="total">Total: S/ 1,591.90</p>
+          <p>Método de Pago: Tarjeta de Crédito</p>
+          <div class="divider"></div>
+          <p class="text-center text-xs">Válido solo para entrega de productos, pedir su Boleta y/o Factura</p>
+          <p class="text-center text-xs text-bold mt-1">No olvidar registrar el equipo en su operador móvil</p>
+          <p class="thank-you-message">¡Gracias por su compra!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="explanation">
+    <h2>Explicación de las Mejoras</h2>
+    <p><strong>Validación de Tipos de Datos:</strong> Se han implementado funciones de validación para asegurar que los valores numéricos sean correctos antes de procesarlos, evitando valores NaN.</p>
+    <p><strong>Manejo Seguro de Valores:</strong> Los valores se convierten de forma segura usando parseFloat y parseInt, con valores por defecto en caso de fallo.</p>
+    <p><strong>Estructura Mejorada:</strong> El recibo ahora tiene una estructura clara con secciones bien definidas y separadores visuales.</p>
+    <p><strong>Compatibilidad con Caracteres Acentuados:</strong> Se ha añadido la meta etiqueta UTF-8 para garantizar la correcta visualización de caracteres españoles.</p>
+    <p><strong>Diseño Optimizado:</strong> El diseño se ha adaptado específicamente para impresoras de tickets de 80mm.</p>
+  </div>
+</body>
+</html>

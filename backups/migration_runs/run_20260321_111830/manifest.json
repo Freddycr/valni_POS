@@ -1,0 +1,22 @@
+{
+  "run_id": "run_20260321_111830",
+  "extracted_at": "2026-03-21T16:18:40.882Z",
+  "source": {
+    "firebase_base_url": "https://us-central1-registroventas-466719.cloudfunctions.net",
+    "endpoints": [
+      "getProducts",
+      "getSalesData"
+    ]
+  },
+  "counts": {
+    "products": 2131,
+    "sales": 2333,
+    "sale_details": 1797,
+    "sale_payments": 0,
+    "customers": 2650
+  },
+  "files": {
+    "products": "D:\\app\\registro_ventas_gs\\supabase_version\\backups\\migration_runs\\run_20260321_111830\\products.json",
+    "sales_package": "D:\\app\\registro_ventas_gs\\supabase_version\\backups\\migration_runs\\run_20260321_111830\\sales_package.json"
+  }
+}
