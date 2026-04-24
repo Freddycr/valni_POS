@@ -125,7 +125,7 @@ export const getProducts = async (): Promise<Product[]> => {
     imei1: p.imei_1,
     imei2: p.imei_2,
     serialNumber: p.serial_number,
-    location: p.location || p.location_bin || 'Tienda', // Mapear location_bin a location
+    location: p.location || p.location_bin || 'TIENDA PRINCIPAL', // Mapear location_bin a location
     status: p.status === 'available' ? 'Registrado' : (p.status || 'Registrado'),
     // Mapping Relations
     model: p.models?.name || '',

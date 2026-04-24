@@ -106,6 +106,13 @@ const App: React.FC = () => {
       if (module.setActiveStoreId) {
         module.setActiveStoreId(nextStoreId || null);
       }
+      if (module.setActiveCompanyId) {
+        const nextStore = refreshedStores.find(store => store.id === nextStoreId);
+        const nextCompanyId = String(nextStore?.companyId || '').trim();
+        if (nextCompanyId) {
+          module.setActiveCompanyId(nextCompanyId);
+        }
+      }
     } catch (err) {
       console.error('No se pudo refrescar la lista de tiendas:', err);
     }
@@ -128,6 +135,13 @@ const App: React.FC = () => {
         const resolvedActiveStoreId = user.activeStoreId || stores[0]?.id || '';
         if (module.setActiveStoreId) {
           module.setActiveStoreId(resolvedActiveStoreId || null);
+        }
+        if (module.setActiveCompanyId) {
+          const nextStore = stores.find(store => store.id === resolvedActiveStoreId) || stores[0];
+          const nextCompanyId = String(nextStore?.companyId || '').trim();
+          if (nextCompanyId) {
+            module.setActiveCompanyId(nextCompanyId);
+          }
         }
         setUserStores(stores);
         setActiveStoreIdState(resolvedActiveStoreId);
@@ -181,6 +195,13 @@ const App: React.FC = () => {
       if (module.setActiveStoreId) {
         module.setActiveStoreId(storeId || null);
       }
+      if (module.setActiveCompanyId) {
+        const nextStore = userStores.find(store => store.id === storeId);
+        const nextCompanyId = String(nextStore?.companyId || '').trim();
+        if (nextCompanyId) {
+          module.setActiveCompanyId(nextCompanyId);
+        }
+      }
       if (module.setActiveWarehouseId) {
         module.setActiveWarehouseId(null);
       }
@@ -222,7 +243,7 @@ const App: React.FC = () => {
       case 'sales':
         return <SalesForm currentUser={currentUser!} activeStoreId={activeStoreId} stores={userStores} />;
       case 'reports':
-        return <ReportsScreen activeStoreId={activeStoreId} stores={userStores} />;
+        return <ReportsScreen activeStoreId={activeStoreId} stores={userStores} userRole={currentUser?.role} />;
       case 'dailyReport':
         return <DailyReportScreen activeStoreId={activeStoreId} stores={userStores} />;
       case 'inventory':

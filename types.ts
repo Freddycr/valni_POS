@@ -92,6 +92,7 @@ export interface Product {
   stockQuantity: number;
   minStockAlert: number;
   status: string;
+  registrationStatus?: 'No registrado' | 'Registrado' | 'Homologado' | string;
   location?: string;
   locationBin?: string;
   storeId?: string;

@@ -25,9 +25,11 @@ const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; 
 interface ReportsScreenProps {
     activeStoreId?: string;
     stores?: Store[];
+    userRole?: string;
 }
 
-const ReportsScreen: React.FC<ReportsScreenProps> = ({ activeStoreId, stores = [] }) => {
+const ReportsScreen: React.FC<ReportsScreenProps> = ({ activeStoreId, stores = [], userRole }) => {
+    const isSeller = userRole === 'seller';
     const normalizeMethod = (value?: string | null) =>
         String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 
@@ -364,7 +366,8 @@ const ReportsScreen: React.FC<ReportsScreenProps> = ({ activeStoreId, stores = [
                 </div>
             </div>
 
-            {/* Estadísticas Rápidas */}
+            {/* Estadísticas Rápidas — oculto para vendedores */}
+            {!isSeller && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
                     title="Caja Efectiva"
@@ -397,6 +400,7 @@ const ReportsScreen: React.FC<ReportsScreenProps> = ({ activeStoreId, stores = [
                     icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>}
                 />
             </div>
+            )}
 
             {/* Filtros Avanzados */}
             <div className="card !bg-[#161c2d]/50">
@@ -426,7 +430,8 @@ const ReportsScreen: React.FC<ReportsScreenProps> = ({ activeStoreId, stores = [
                 </div>
             </div>
 
-            {/* Gráficos */}
+            {/* Gráficos — oculto para vendedores */}
+            {!isSeller && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="card">
                     <h3 className="text-lg font-bold text-white mb-6">Top 10 Productos por Ingresos</h3>
@@ -502,6 +507,7 @@ const ReportsScreen: React.FC<ReportsScreenProps> = ({ activeStoreId, stores = [
                     </div>
                 </div>
             </div>
+            )}
 
             {/* Tabla Detallada */}
             <div className="card">

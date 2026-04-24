@@ -15,19 +15,62 @@ if (!runDir) {
 const supabaseUrl = String(
   args["supabase-url"] || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ypeolvspffwxjtqxphzr.supabase.co"
 ).trim();
-const serviceRoleKey = String(args["service-role-key"] || process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+
+function parseDotEnvLine(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed || trimmed.startsWith("#")) return null;
+
+  const idx = trimmed.indexOf("=");
+  if (idx <= 0) return null;
+
+  const key = trimmed.slice(0, idx).trim();
+  let value = trimmed.slice(idx + 1).trim();
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    value = value.slice(1, -1);
+  }
+  return { key, value };
+}
+
+function loadDotEnvFile(filePath) {
+  const env = {};
+  const resolved = path.resolve(filePath);
+  if (!fs.existsSync(resolved)) return env;
+  const content = fs.readFileSync(resolved, "utf8");
+  for (const line of content.split(/\r?\n/)) {
+    const parsed = parseDotEnvLine(line);
+    if (!parsed) continue;
+    if (!(parsed.key in env)) env[parsed.key] = parsed.value;
+  }
+  return env;
+}
+
+const envFileArg = String(args["env-file"] || "").trim();
+const candidateEnvFiles = envFileArg ? [envFileArg] : [".env.local", ".env.production", ".env"];
+let fileEnv = {};
+for (const candidate of candidateEnvFiles) {
+  try {
+    fileEnv = { ...fileEnv, ...loadDotEnvFile(candidate) };
+  } catch {
+    // ignore env file parse errors
+  }
+}
+
+const serviceRoleKey = String(
+  args["service-role-key"] || process.env.SUPABASE_SERVICE_ROLE_KEY || fileEnv.SUPABASE_SERVICE_ROLE_KEY || ""
+).trim();
 if (!serviceRoleKey) {
-  console.error("Falta SUPABASE_SERVICE_ROLE_KEY (env o --service-role-key)");
+  console.error("Falta SUPABASE_SERVICE_ROLE_KEY (env, --service-role-key, o --env-file)");
   process.exit(1);
 }
 
 const companyNameArg = String(args["company-name"] || "VALNI_TEST_MIG").trim();
 const companyIdArg = String(args["company-id"] || "").trim();
-const storeNameArg = String(args["store-name"] || "Tienda Principal").trim();
+const storeNameArg = String(args["store-name"] || "TIENDA PRINCIPAL").trim();
 const storeCodeArg = String(args["store-code"] || "T01").trim();
-const warehouseNameArg = String(args["warehouse-name"] || "Almacen Principal").trim();
+const warehouseNameArg = String(args["warehouse-name"] || "ALMACEN PRINCIPAL").trim();
 const warehouseCodeArg = String(args["warehouse-code"] || "A01").trim();
 const reportPathArg = String(args["report-path"] || path.join(runDir, `load_report_${nowStamp()}.json`)).trim();
+const scopeArg = String(args["scope"] || "all").trim().toLowerCase();
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
@@ -57,6 +100,7 @@ let storeId = "";
 let warehouseStoreId = "";
 let salePaymentsSupportsMethodLabel = true;
 let productsSupportsSkuUpsert = true;
+let productsSupportsImeiUpsert = true;
 let companyProductFootprintReset = false;
 let customersSupportDocUpsert = true;
 let companyCustomerFootprintReset = false;
@@ -92,8 +136,9 @@ function toPeruIsoTimestamp(input) {
 
 function normalizeLocation(value) {
   const raw = String(value || "").trim().toLowerCase();
-  if (raw.includes("almacen")) return "Almacen";
-  return "Tienda";
+  if (raw.includes("almacen") || raw.includes("alamcen")) return "ALMACEN PRINCIPAL";
+  if (raw.includes("tienda") || raw.includes("teinda")) return "TIENDA PRINCIPAL";
+  return "TIENDA PRINCIPAL";
 }
 
 function mapProductType(value) {
@@ -101,6 +146,53 @@ function mapProductType(value) {
   if (["smartphone", "tablet", "accessory", "part", "service"].includes(raw)) return raw;
   if (raw === "individual" || raw === "equipo") return "smartphone";
   return "accessory";
+}
+
+const REGISTRATION_STATUSES = new Set(["No registrado", "Registrado", "Homologado"]);
+
+function normalizeRegistrationStatus(value) {
+  const raw = String(value || "").trim();
+  if (REGISTRATION_STATUSES.has(raw)) return raw;
+  return "No registrado";
+}
+
+function deriveAvailabilityStatus(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "vendido" || raw === "sold") return "sold";
+  return "available";
+}
+
+async function seedProductMapFromDb(productsSnapshot) {
+  // When running in sales-only mode, productMap is empty unless migrateProducts ran.
+  // Rebuild productMap by matching the synthetic SKU we use during migration: MIGSKU-<legacyId>.
+  const legacyIds = (productsSnapshot || [])
+    .map((p) => String(p?.id || "").trim())
+    .filter(Boolean);
+
+  if (legacyIds.length === 0) return;
+
+  const skus = [...new Set(legacyIds.map((id) => `MIGSKU-${id}`))];
+  const BATCH_SIZE = 200;
+
+  productMap.clear();
+  for (let i = 0; i < skus.length; i += BATCH_SIZE) {
+    const batch = skus.slice(i, i + BATCH_SIZE);
+    const { data, error } = await supabase
+      .from("products")
+      .select("id,sku")
+      .eq("company_id", companyId)
+      .in("sku", batch);
+    if (error) throw error;
+
+    for (const row of data || []) {
+      const sku = String(row?.sku || "").trim();
+      const id = row?.id || null;
+      const legacyId = sku.replace(/^MIGSKU-/, "");
+      if (legacyId && id) {
+        productMap.set(legacyId, id);
+      }
+    }
+  }
 }
 
 function normalizeText(value) {
@@ -198,6 +290,51 @@ function buildSyntheticDocNumber(customer) {
 
   const digest = crypto.createHash("sha1").update(fingerprint || "cliente_sin_identidad").digest("hex").slice(0, 12);
   return `MIGDOC-${companyId.slice(0, 8)}-${digest}`;
+}
+
+async function seedCustomerMapFromDb(customersSnapshot) {
+  const legacyRows = (customersSnapshot || [])
+    .map((c) => ({
+      legacyId: String(c?.id || "").trim(),
+      rawDoc: String(c?.dni || c?.docNumber || c?.doc_number || "").trim(),
+      snapshot: c,
+    }))
+    .filter((row) => row.legacyId);
+
+  if (legacyRows.length === 0) return;
+
+  const docNumbers = [...new Set(
+    legacyRows
+      .map((row) => row.rawDoc || buildSyntheticDocNumber(row.snapshot))
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  )];
+
+  if (docNumbers.length === 0) return;
+
+  const docToCustomerId = new Map();
+  const BATCH_SIZE = 200;
+
+  for (let i = 0; i < docNumbers.length; i += BATCH_SIZE) {
+    const batch = docNumbers.slice(i, i + BATCH_SIZE);
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id,doc_number")
+      .eq("company_id", companyId)
+      .in("doc_number", batch);
+    if (error) throw error;
+    for (const row of data || []) {
+      const doc = String(row?.doc_number || "").trim();
+      if (doc && row?.id) docToCustomerId.set(doc, row.id);
+    }
+  }
+
+  customerMap.clear();
+  for (const row of legacyRows) {
+    const doc = row.rawDoc || buildSyntheticDocNumber(row.snapshot);
+    const id = docToCustomerId.get(String(doc || "").trim());
+    if (id) customerMap.set(row.legacyId, id);
+  }
 }
 
 function isMissingColumnError(error, columnName) {
@@ -563,6 +700,8 @@ async function migrateProducts(products) {
     const brandId = brandMap.get(brandName) || null;
     const modelId = modelMap.get(`${brandId || "none"}_${modelName}`) || null;
     const sku = `MIGSKU-${String(p.id || "").trim()}`;
+    const legacyStatus = String(p.status || "").trim();
+    const registrationStatus = normalizeRegistrationStatus(p.registrationStatus || p.registration_status || legacyStatus);
 
     return {
       company_id: companyId,
@@ -574,7 +713,8 @@ async function migrateProducts(products) {
       sell_price: Number(p.price || 0),
       min_sell_price: Number(p.minPrice || p.min_price || 0),
       stock_quantity: Number(p.stock || p.stock_quantity || 0),
-      status: String(p.status || "available").toLowerCase() === "vendido" ? "sold" : "available",
+      status: deriveAvailabilityStatus(legacyStatus),
+      registration_status: registrationStatus,
       location_bin: normalizeLocation(p.location || p.location_bin),
       imei_1: String(p.imei1 || p.imei_1 || "").trim() || null,
       imei_2: String(p.imei2 || p.imei_2 || "").trim() || null,
@@ -611,12 +751,22 @@ async function migrateProducts(products) {
 
   const BATCH_SIZE = 200;
   const skuToProductId = new Map();
-  const persistProductBatch = async (batch) => {
+  const persistProductBatchBySku = async (batch) => {
     const query = supabase.from("products");
     if (productsSupportsSkuUpsert) {
-      return query.upsert(batch, { onConflict: "sku" }).select("id,sku");
+      return query.upsert(batch, { onConflict: "sku" }).select("id,sku,imei_1");
     }
-    return query.insert(batch).select("id,sku");
+    return query.insert(batch).select("id,sku,imei_1");
+  };
+
+  const persistProductBatchByImei = async (batch) => {
+    // Use IMEI as conflict target for serialized products to avoid duplicates when existing rows have sku NULL.
+    // products.imei_1 is expected to be UNIQUE.
+    const query = supabase.from("products");
+    if (productsSupportsImeiUpsert) {
+      return query.upsert(batch, { onConflict: "imei_1" }).select("id,sku,imei_1");
+    }
+    return query.insert(batch).select("id,sku,imei_1");
   };
 
   const persistAllProducts = async () => {
@@ -624,9 +774,30 @@ async function migrateProducts(products) {
     productMap.clear();
     skuToProductId.clear();
 
-    for (let i = 0; i < dedupedProductRows.length; i += BATCH_SIZE) {
-      const batch = dedupedProductRows.slice(i, i + BATCH_SIZE);
-      const { data, error } = await persistProductBatch(batch);
+    const imeiToCanonicalSku = new Map();
+    for (const [imei, canonicalSku] of imei1ToSku.entries()) {
+      imeiToCanonicalSku.set(String(imei), String(canonicalSku));
+    }
+
+    const byImei = dedupedProductRows.filter((row) => row.imei_1);
+    const bySku = dedupedProductRows.filter((row) => !row.imei_1);
+
+    for (let i = 0; i < byImei.length; i += BATCH_SIZE) {
+      const batch = byImei.slice(i, i + BATCH_SIZE);
+      const { data, error } = await persistProductBatchByImei(batch);
+      if (error) throw error;
+      counters.products_upserted += data?.length || 0;
+      for (const row of data || []) {
+        const canonicalSku = (row.imei_1 && imeiToCanonicalSku.get(String(row.imei_1))) || row.sku;
+        if (canonicalSku && row.id) {
+          skuToProductId.set(String(canonicalSku), row.id);
+        }
+      }
+    }
+
+    for (let i = 0; i < bySku.length; i += BATCH_SIZE) {
+      const batch = bySku.slice(i, i + BATCH_SIZE);
+      const { data, error } = await persistProductBatchBySku(batch);
       if (error) throw error;
       counters.products_upserted += data?.length || 0;
       for (const row of data || []) {
@@ -647,11 +818,14 @@ async function migrateProducts(products) {
   try {
     await persistAllProducts();
   } catch (error) {
-    if (!productsSupportsSkuUpsert || !isInvalidOnConflictError(error)) {
+    if (!isInvalidOnConflictError(error)) {
       throw error;
     }
 
+    // Remote schema may not have UNIQUE constraints for ON CONFLICT.
+    // Fall back to full reset + insert-only mode to avoid duplicate rows.
     productsSupportsSkuUpsert = false;
+    productsSupportsImeiUpsert = false;
     await resetCompanyProductFootprint();
     await persistAllProducts();
   }
@@ -664,7 +838,7 @@ async function migrateProducts(products) {
 
     const onHand = Math.max(0, Number(p.stock || p.stock_quantity || 0));
     const location = normalizeLocation(p.location || p.location_bin);
-    const assignedStoreId = location === "Almacen" ? warehouseStoreId : storeId;
+    const assignedStoreId = location === "ALMACEN PRINCIPAL" ? warehouseStoreId : storeId;
     const inventoryKey = `${productId}::${assignedStoreId}`;
     const existing = inventoryRowMap.get(inventoryKey);
 
@@ -944,9 +1118,27 @@ async function main() {
   const snapshots = await readSnapshots();
 
   await upsertCompany();
-  await migrateProducts(snapshots.products);
-  await migrateCustomers(snapshots.customers);
-  await migrateSales(snapshots.sales, snapshots.details, snapshots.payments);
+
+  const scope = scopeArg;
+  const wantsProducts = scope === "all" || scope === "products" || scope === "product" || scope === "productos";
+  const wantsCustomers = scope === "all" || scope === "customers" || scope === "customer" || scope === "clientes";
+  const wantsSales = scope === "all" || scope === "sales" || scope === "sale" || scope === "ventas";
+
+  if (wantsProducts) {
+    await migrateProducts(snapshots.products);
+  }
+  if (wantsCustomers) {
+    await migrateCustomers(snapshots.customers);
+  }
+  if (wantsSales) {
+    if (!wantsProducts && productMap.size === 0) {
+      await seedProductMapFromDb(snapshots.products);
+    }
+    if (!wantsCustomers && customerMap.size === 0) {
+      await seedCustomerMapFromDb(snapshots.customers);
+    }
+    await migrateSales(snapshots.sales, snapshots.details, snapshots.payments);
+  }
 
   const report = {
     run_dir: path.resolve(runDir),

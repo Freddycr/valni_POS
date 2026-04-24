@@ -2,6 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Customer, Sale, Product, SaleDetail } from '../types';
 import { getCustomers, getSalesData, getProducts } from '../services/api';
 
+const getRegistrationStatus = (product: any): string => {
+    const reg = String(product?.registrationStatus || '').trim();
+    if (reg) return reg;
+    const legacy = String(product?.status || '').trim();
+    if (legacy === 'Registrado' || legacy === 'No registrado' || legacy === 'Homologado') return legacy;
+    return 'No registrado';
+};
+
 const WhatsAppScreen: React.FC = () => {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [sales, setSales] = useState<Sale[]>([]);
@@ -68,8 +76,7 @@ const WhatsAppScreen: React.FC = () => {
 
                 if (productStatusFilter === 'Todos') return true;
 
-                // Consider 'No registrado' for products that might not have the status field
-                const productStatus = product.status || 'No registrado';
+                const productStatus = getRegistrationStatus(product);
                 return productStatus === productStatusFilter;
             });
 

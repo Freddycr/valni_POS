@@ -6,7 +6,15 @@ import Receipt from './Receipt';
 import { User, Product, Customer, CartItem, PaymentMethodAdmin, Brand, Model, InventoryLocation, Store } from '../types';
 import { getProducts, getCustomers, saveCustomer, saveSale, getPaymentMethods, getBrands, getModels, getReceiptHeader, getLocations, getCustomerAdvanceBalance, applyCustomerAdvancesToSale } from '../services/api';
 
-const LOCATION_FALLBACKS = ['Tienda', 'Almacen'];
+const LOCATION_FALLBACKS = ['TIENDA PRINCIPAL', 'ALMACEN PRINCIPAL'];
+
+const getRegistrationStatus = (product: any): string => {
+  const reg = String(product?.registrationStatus || '').trim();
+  if (reg) return reg;
+  const legacy = String(product?.status || '').trim();
+  if (legacy === 'Registrado' || legacy === 'No registrado' || legacy === 'Homologado') return legacy;
+  return 'No registrado';
+};
 
 interface SalesFormProps {
   currentUser: User;
@@ -103,11 +111,14 @@ const SalesForm: React.FC<SalesFormProps> = ({ currentUser, activeStoreId, store
       setModels(modelsData);
       setLocations(locationsData);
 
-      const activeStoreName = stores.find(store => store.id === activeStoreId)?.name;
+      const activeStoreName = stores.find(store => store.id === activeStoreId)?.name
+        || locationsData.find(loc => loc.id === activeStoreId)?.name;
+      const defaultLocationName = locationsData.find(loc => loc.isDefault)?.name;
       const availableLocations = (locationsData.length > 0 ? locationsData.map(loc => loc.name) : LOCATION_FALLBACKS);
       setSelectedLocation(prev => {
         const hasProductsIn = (locationName: string) => productsWithStock.some(p => p.location === locationName);
         if (activeStoreName && availableLocations.includes(activeStoreName) && hasProductsIn(activeStoreName)) return activeStoreName;
+        if (defaultLocationName && availableLocations.includes(defaultLocationName) && hasProductsIn(defaultLocationName)) return defaultLocationName;
         if (prev && availableLocations.includes(prev) && hasProductsIn(prev)) return prev;
         const firstWithProducts = availableLocations.find(hasProductsIn);
         return firstWithProducts || availableLocations[0] || '';
@@ -419,7 +430,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ currentUser, activeStoreId, store
             imei1: item.imei1,
             imei2: item.imei2,
             serialNumber: item.serialNumber,
-            status: productDetails?.status || 'N/A'
+            status: productDetails ? getRegistrationStatus(productDetails) : 'N/A'
           };
         }),
         payments: payments,
@@ -428,7 +439,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ currentUser, activeStoreId, store
         date: new Date(),
         hasUnregisteredProduct: cart.some(item => {
           const productDetails = products.find(p => p.id === item.productId);
-          return productDetails?.status === 'No registrado';
+          return productDetails ? getRegistrationStatus(productDetails) === 'No registrado' : false;
         })
       };
       setLastSaleData(saleForReceipt);
@@ -1053,10 +1064,16 @@ const SalesForm: React.FC<SalesFormProps> = ({ currentUser, activeStoreId, store
                             {p.imei1 && p.serialNumber && <div className="text-[10px] text-slate-500">SN: {p.serialNumber}</div>}
                           </td>
                           <td className="td-style">
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${p.status === 'Registrado' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-                              }`}>
-                              {p.status?.toUpperCase() || 'N/A'}
-                            </span>
+                            {(() => {
+                              const value = getRegistrationStatus(p);
+                              const isRegistered = value === 'Registrado';
+                              return (
+                                <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${isRegistered ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                                  }`}>
+                                  {value.toUpperCase()}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="td-style text-right font-bold text-[#11d483]">{formatCurrency(p.sellPrice || 0)}</td>
                           <td className="td-style text-right">
@@ -1104,7 +1121,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ currentUser, activeStoreId, store
           <div className="xl:col-span-4 space-y-6">
 
             {/* Carrito de Compras */}
-            <div className="card !p-0 overflow-hidden flex flex-col h-full max-h-[85vh]">
+            <div className="card !p-0 overflow-hidden flex flex-col h-full max-h-[85vh] min-h-0">
               <div className="p-6 border-b border-white/5 bg-white/5">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#11d483]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1114,7 +1131,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ currentUser, activeStoreId, store
                 </h2>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar min-h-[200px]">
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar min-h-0">
                 {cart.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-10 text-slate-500">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-2 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1172,7 +1189,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ currentUser, activeStoreId, store
                 )}
               </div>
 
-              <div className="p-6 bg-slate-50 border-t border-slate-200 space-y-4">
+              <div className="p-6 bg-slate-50 border-t border-slate-200 space-y-4 max-h-[45vh] overflow-y-auto custom-scrollbar">
                 <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                   <span className="text-sm font-bold text-slate-800 uppercase tracking-widest">Total a Pagar</span>
                   <span className="text-3xl font-extrabold text-slate-900">{formatCurrency(totalSale)}</span>
@@ -1277,32 +1294,34 @@ const SalesForm: React.FC<SalesFormProps> = ({ currentUser, activeStoreId, store
                   </div>
                 )}
 
-                {saleSuccess ? (
-                  <div className="space-y-3 animate-fade-in">
-                    <div className="p-4 rounded-2xl bg-green-500/10 border border-green-500/50 text-green-400 text-center font-bold">
-                      {saleSuccess}
+                <div className="sticky bottom-0 bg-slate-50 pt-3">
+                  {saleSuccess ? (
+                    <div className="space-y-3 animate-fade-in">
+                      <div className="p-4 rounded-2xl bg-green-500/10 border border-green-500/50 text-green-400 text-center font-bold">
+                        {saleSuccess}
+                      </div>
+                      <button onClick={handlePrintReceipt} className="btn btn-primary w-full !text-md !py-4 font-black">
+                        IMPRIMIR RECIBO
+                      </button>
+                      <button onClick={() => setSaleSuccess(null)} className="w-full text-center text-xs font-bold text-slate-500 hover:text-white transition-colors py-2 uppercase tracking-widest">
+                        Nueva Venta
+                      </button>
                     </div>
-                    <button onClick={handlePrintReceipt} className="btn btn-primary w-full !text-md !py-4 font-black">
-                      IMPRIMIR RECIBO
-                    </button>
-                    <button onClick={() => setSaleSuccess(null)} className="w-full text-center text-xs font-bold text-slate-500 hover:text-white transition-colors py-2 uppercase tracking-widest">
-                      Nueva Venta
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <button
-                      onClick={handleFinalizeSale}
-                      disabled={isLoading || (!selectedCustomerId && !isNewCustomer) || cart.length === 0 || totalPayments !== totalSale}
-                      className="btn btn-primary w-full !text-lg !py-4 !font-extrabold !text-white !bg-emerald-600 hover:!bg-emerald-700 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed group"
-                    >
-                      {isLoading ? 'PROCESANDO...' : 'FINALIZAR VENTA'}
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
+                  ) : (
+                    <div className="space-y-3">
+                      <button
+                        onClick={handleFinalizeSale}
+                        disabled={isLoading || (!selectedCustomerId && !isNewCustomer) || cart.length === 0 || totalPayments !== totalSale}
+                        className="btn btn-primary w-full !text-lg !py-4 !font-extrabold !text-white !bg-emerald-600 hover:!bg-emerald-700 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed group"
+                      >
+                        {isLoading ? 'PROCESANDO...' : 'FINALIZAR VENTA'}
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

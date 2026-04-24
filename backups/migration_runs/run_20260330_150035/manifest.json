@@ -1,0 +1,22 @@
+{
+  "run_id": "run_20260330_150035",
+  "extracted_at": "2026-03-30T20:00:46.044Z",
+  "source": {
+    "firebase_base_url": "https://us-central1-registroventas-466719.cloudfunctions.net",
+    "endpoints": [
+      "getProducts",
+      "getSalesData"
+    ]
+  },
+  "counts": {
+    "products": 2218,
+    "sales": 2434,
+    "sale_details": 1876,
+    "sale_payments": 0,
+    "customers": 2759
+  },
+  "files": {
+    "products": "C:\\Users\\ASUS\\Desktop\\supabase_version\\supabase_version\\backups\\migration_runs\\run_20260330_150035\\products.json",
+    "sales_package": "C:\\Users\\ASUS\\Desktop\\supabase_version\\supabase_version\\backups\\migration_runs\\run_20260330_150035\\sales_package.json"
+  }
+}

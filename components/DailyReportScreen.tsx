@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { formatCurrency } from '../utils/formatting';
 import { Sale, Product, User, PaymentDetail, SaleDetail, Customer, AdvanceMovement, Store } from '../types';
-import { getDailyReportData } from '../services/api';
+import { getDailyReportData, getActiveCompanyId, setActiveCompanyId } from '../services/api';
 import Receipt from './Receipt';
 
 interface DailyReportData {
@@ -83,20 +83,18 @@ const DailyReportScreen: React.FC<DailyReportScreenProps> = ({ activeStoreId, st
   const [scope, setScope] = useState<'active' | 'store' | 'consolidated'>('consolidated');
   const [selectedStoreId, setSelectedStoreId] = useState<string>('');
   const reportRef = useRef<HTMLDivElement>(null);
+  const printIframeRef = useRef<HTMLIFrameElement>(null);
   
   const handlePrintDailyReport = () => {
     const reportElement = reportRef.current;
     if (!reportElement) return;
 
-    const printWindow = window.open('', '_blank', 'width=1200,height=800');
-    if (!printWindow) {
-      alert('No se pudo abrir la ventana de impresión. Verifique si el navegador bloquea ventanas emergentes.');
-      return;
-    }
-
-    printWindow.document.write(`
+    const printHtml = `
+      <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
           <title>Reporte Diario</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
@@ -118,14 +116,73 @@ const DailyReportScreen: React.FC<DailyReportScreenProps> = ({ activeStoreId, st
           ${reportElement.innerHTML}
         </body>
       </html>
-    `);
+    `;
 
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.onload = () => {
-      printWindow.print();
-      printWindow.close();
+    const fail = (err?: unknown) => {
+      console.error('Error al imprimir reporte diario:', err);
+      alert('Se produjo un error al imprimir el reporte diario.');
     };
+
+    // Preferred path (mobile-friendly): print via hidden iframe, avoids popup blockers.
+    try {
+      const iframe = printIframeRef.current;
+      if (iframe) {
+        const handleLoad = () => {
+          try {
+            const win = iframe.contentWindow;
+            if (!win) {
+              fail('iframe has no contentWindow');
+              return;
+            }
+
+            // Small delay helps Safari/iOS finish layout before printing.
+            setTimeout(() => {
+              try {
+                win.focus();
+                win.print();
+              } catch (e) {
+                fail(e);
+              }
+            }, 300);
+          } catch (e) {
+            fail(e);
+          }
+        };
+
+        iframe.addEventListener('load', handleLoad, { once: true });
+        iframe.srcdoc = printHtml;
+        return;
+      }
+    } catch (e) {
+      // If iframe path fails for any reason, fallback below.
+      console.warn('Falling back to window.open printing:', e);
+    }
+
+    // Fallback: new window/tab printing.
+    try {
+      const printWindow = window.open('', '_blank', 'width=1200,height=800');
+      if (!printWindow) {
+        fail('window.open blocked');
+        return;
+      }
+
+      printWindow.document.open();
+      printWindow.document.write(printHtml);
+      printWindow.document.close();
+      printWindow.focus();
+
+      // Delay helps some mobile browsers.
+      setTimeout(() => {
+        try {
+          printWindow.print();
+          printWindow.close();
+        } catch (e) {
+          fail(e);
+        }
+      }, 300);
+    } catch (e) {
+      fail(e);
+    }
   };
 
   useEffect(() => {
@@ -133,6 +190,20 @@ const DailyReportScreen: React.FC<DailyReportScreenProps> = ({ activeStoreId, st
       setSelectedStoreId(activeStoreId || stores[0].id);
     }
   }, [stores, activeStoreId, selectedStoreId]);
+
+  useEffect(() => {
+    if (!stores || stores.length === 0) return;
+    const preferredStoreId = activeStoreId || selectedStoreId || stores[0].id;
+    const store = stores.find(s => s.id === preferredStoreId) || stores[0];
+    const nextCompanyId = String(store?.companyId || '').trim();
+    if (!nextCompanyId) return;
+
+    const currentCompanyId = String(getActiveCompanyId() || '').trim();
+    if (currentCompanyId !== nextCompanyId) {
+      setActiveCompanyId(nextCompanyId);
+      fetchReport(selectedDate);
+    }
+  }, [stores, activeStoreId, selectedStoreId, selectedDate]);
 
   const fetchReport = async (reportDate?: string) => {
     const effectiveDate = (typeof reportDate === 'string' && reportDate.trim().length > 0)
@@ -187,9 +258,9 @@ const DailyReportScreen: React.FC<DailyReportScreenProps> = ({ activeStoreId, st
 
     return reportData.sales.map(sale => {
       const groupedItems = new Map<string, any>();
-      reportData.details
-        .filter(detail => detail.saleId === sale.id)
-        .forEach((detail) => {
+      const saleDetails = reportData.details.filter(detail => detail.saleId === sale.id);
+
+      saleDetails.forEach((detail) => {
           const product = productsById.get(detail.productId);
           const imei = String((detail as any).imei1 || '').trim();
           const serialNumber = String((detail as any).serialNumber || '').trim();
@@ -220,30 +291,44 @@ const DailyReportScreen: React.FC<DailyReportScreenProps> = ({ activeStoreId, st
           });
         });
 
-      const items = Array.from(groupedItems.values());
-      const detailTotal = items.reduce((sum, item) => sum + (Number(item.salePrice || 0) * Number(item.quantity || 0)), 0);
       const saleTotal = Number(sale.total || 0);
-      const detailGap = Math.round((saleTotal - detailTotal + Number.EPSILON) * 100) / 100;
+      const items = Array.from(groupedItems.values());
 
-      // Some migrated sales include total/payment that does not fully map to structured line-items.
-      // Add an explicit adjustment line so report and printout reconcile totals.
-      if (Math.abs(detailGap) >= 0.01) {
+      if (saleDetails.length === 0) {
         items.push({
-          id: `adj-${sale.id}`,
+          id: `nodetail-${sale.id}`,
           saleId: sale.id,
-          productId: `adj-${sale.id}`,
+          productId: `nodetail-${sale.id}`,
           quantity: 1,
-          salePrice: detailGap,
-          name: detailGap > 0 ? 'Concepto adicional (migración sin detalle)' : 'Ajuste de detalle (migración)',
-          description: 'Ajuste automático por diferencia entre detalle y total',
-          isSyntheticAdjustment: true
+          salePrice: saleTotal,
+          name: 'Venta sin detalle',
+          description: 'No se registró el detalle de productos para esta venta',
+          isSyntheticNoDetail: true
         } as any);
+      } else {
+        const detailTotal = items.reduce((sum, item) => sum + (Number(item.salePrice || 0) * Number(item.quantity || 0)), 0);
+        const detailGap = Math.round((saleTotal - detailTotal + Number.EPSILON) * 100) / 100;
+
+        // Some migrated sales include total/payment that does not fully map to structured line-items.
+        // Add an explicit adjustment line so report and printout reconcile totals.
+        if (Math.abs(detailGap) >= 0.01) {
+          items.push({
+            id: `adj-${sale.id}`,
+            saleId: sale.id,
+            productId: `adj-${sale.id}`,
+            quantity: 1,
+            salePrice: detailGap,
+            name: detailGap > 0 ? 'Concepto adicional (migración sin detalle)' : 'Ajuste de detalle (migración)',
+            description: 'Ajuste automático por diferencia entre detalle y total',
+            isSyntheticAdjustment: true
+          } as any);
+        }
       }
 
       const payments = reportData.payments.filter(p => p.saleId === sale.id);
       const customer = reportData.customers.find(c => c.id === sale.customerId);
       return { ...sale, items, payments, customer };
-    }).filter(sale => (sale.payments?.length || 0) > 0); // Ignorar intentos fallidos (ventas sin pagos)
+    });
   }, [reportData]);
 
   const salesBySeller = React.useMemo(() => {
@@ -396,6 +481,20 @@ const DailyReportScreen: React.FC<DailyReportScreenProps> = ({ activeStoreId, st
 
   return (
     <div className="animate-fade-in space-y-8">
+      <iframe
+        ref={printIframeRef}
+        title="daily-report-print"
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          right: 0,
+          bottom: 0,
+          width: 0,
+          height: 0,
+          border: 0,
+          visibility: 'hidden',
+        }}
+      />
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Reporte Diario</h2>

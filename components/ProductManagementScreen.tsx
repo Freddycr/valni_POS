@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Product, Brand, Model, InventoryLocation, Store } from '../types';
 import { getProducts, saveProduct, getBrands, getModels, updateProduct, updateProductsBulk, getLocations, saveLocation, deleteLocation, replaceProductLocation, getSuppliers, saveSupplier } from '../services/api';
 
-const LOCATION_FALLBACKS = ['Tienda', 'Almacen'];
+const LOCATION_FALLBACKS = ['TIENDA PRINCIPAL', 'ALMACEN PRINCIPAL'];
 
 const toOptionalNumber = (value: unknown): number | undefined => {
   if (value === null || value === undefined || value === '') return undefined;
@@ -39,6 +39,18 @@ const formatDateTime = (value?: string): string => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'N/A';
   return date.toLocaleString('es-PE');
+};
+
+const REGISTRATION_STATUSES = new Set(['No registrado', 'Registrado', 'Homologado']);
+
+const getRegistrationStatus = (product: Partial<Product>): string => {
+  const explicit = String((product as any).registrationStatus || '').trim();
+  if (explicit) return explicit;
+
+  const legacy = String((product as any).status || '').trim();
+  if (REGISTRATION_STATUSES.has(legacy)) return legacy;
+
+  return 'No registrado';
 };
 
 const ProductForm = ({
@@ -311,7 +323,7 @@ const ProductForm = ({
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">Estado</label>
-              <select name="status" value={formData.status || 'No registrado'} onChange={handleChange} className="input-style w-full mt-1">
+              <select name="registrationStatus" value={getRegistrationStatus(formData)} onChange={handleChange} className="input-style w-full mt-1">
                 <option value="Registrado">Registrado</option>
                 <option value="No registrado">No registrado</option>
                 <option value="Homologado">Homologado</option>
@@ -505,7 +517,7 @@ const ProductManagementScreen: React.FC<ProductManagementScreenProps> = ({ activ
   const handleAddNew = () => {
     setError(null);
     setLocationError(null);
-    setFormData({ type: 'individual', name: '', description: '', price: undefined, stock: 1, status: 'No registrado', minPrice: undefined, supplierId: '', location: locationOptions[0] || '' });
+    setFormData({ type: 'individual', name: '', description: '', price: undefined, stock: 1, registrationStatus: 'No registrado', minPrice: undefined, supplierId: '', location: locationOptions[0] || '' });
     setIsFormOpen(true);
   };
 
@@ -601,6 +613,7 @@ const ProductManagementScreen: React.FC<ProductManagementScreenProps> = ({ activ
     const normalizedMinPrice = toOptionalNumber(productToSave.minPrice ?? productToSave.minSellPrice);
     const normalizedStock = toOptionalNumber(productToSave.stock ?? productToSave.stockQuantity);
     const normalizedBuyPrice = toOptionalNumber(productToSave.buyPrice);
+    const normalizedRegistrationStatus = getRegistrationStatus(productToSave);
     const normalizedProduct: Partial<Product> = {
       ...productToSave,
       name: String(productToSave.name || '').trim(),
@@ -615,7 +628,7 @@ const ProductManagementScreen: React.FC<ProductManagementScreenProps> = ({ activ
       stock: normalizedStock,
       storeId: productToSave.storeId || activeStoreId || undefined,
       location: String(productToSave.location || fallbackLocation).trim(),
-      status: productToSave.status || 'No registrado'
+      registrationStatus: normalizedRegistrationStatus
     };
 
     if (!normalizedProduct.name) {
@@ -1230,6 +1243,7 @@ const ProductManagementScreen: React.FC<ProductManagementScreenProps> = ({ activ
                 <th className="th-style">Descripción</th>
                 <th className="th-style">IMEI 1</th>
                 <th className="th-style">Proveedor</th>
+                <th className="th-style">Registrado</th>
                 {canEditCatalog && <th className="th-style">P. Compra</th>}
                 <th className="th-style">P. Venta</th>
                 {canEditCatalog && <th className="th-style">P. Mínimo</th>}
@@ -1254,6 +1268,23 @@ const ProductManagementScreen: React.FC<ProductManagementScreenProps> = ({ activ
                   <td className="td-style text-slate-900">{product.imei1 || 'N/A'}</td>
                   <td className="td-style text-slate-900">
                     {suppliers.find(s => String(s.id) === String(product.supplierId || ''))?.name || 'N/A'}
+                  </td>
+                  <td className="td-style">
+                    {(() => {
+                      const normalized = getRegistrationStatus(product);
+                      const cls = normalized === 'Registrado'
+                        ? 'bg-green-500/10 text-green-700 border-green-200'
+                        : normalized === 'No registrado'
+                          ? 'bg-red-500/10 text-red-700 border-red-200'
+                          : normalized === 'Homologado'
+                            ? 'bg-amber-500/10 text-amber-800 border-amber-200'
+                            : 'bg-slate-500/10 text-slate-700 border-slate-200';
+                      return (
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full border text-[10px] font-bold uppercase ${cls}`}>
+                          {normalized}
+                        </span>
+                      );
+                    })()}
                   </td>
                   {canEditCatalog && <td className="td-style text-slate-900">{formatCurrency(product.buyPrice ?? 0)}</td>}
                   <td className="td-style text-slate-900">{formatCurrency(product.price)}</td>

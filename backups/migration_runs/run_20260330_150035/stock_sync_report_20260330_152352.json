@@ -1,0 +1,17 @@
+{
+  "company_id": "d02b20da-41de-4123-ace8-9c5528b334e1",
+  "store_id": "d5825ab6-9134-4245-b796-d8b551459938",
+  "warehouse_store_id": "e7f4e4c6-c780-4870-9f4c-6c533c24b31e",
+  "run_dir": "C:\\Users\\ASUS\\Desktop\\supabase_version\\supabase_version\\backups\\migration_runs\\run_20260330_150035",
+  "dry_run": false,
+  "executed_at": "2026-03-30T20:24:25.437Z",
+  "counters": {
+    "products_input": 2218,
+    "products_matched": 2218,
+    "products_unmatched": 0,
+    "products_updated": 2218,
+    "balances_upserted": 2215
+  },
+  "unmatched_preview": [],
+  "unmatched_count": 0
+}

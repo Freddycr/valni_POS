@@ -39,13 +39,28 @@ const SUPABASE_ANON_KEY = 'sb_publishable_ji7xqwRoXGiIv02v-j_Ofg_SYqgBwfu';
 
 export const supabase = createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const DEFAULT_LOCATION_NAMES = ['Tienda', 'Almacen'];
+const DEFAULT_LOCATION_NAMES = ['TIENDA PRINCIPAL', 'ALMACEN PRINCIPAL'];
 const LOCATION_TABLE = 'inventory_locations';
 const COMPANY_TABLE = 'companies';
 const STORE_TABLE = 'stores';
 const WAREHOUSE_TABLE = 'warehouses';
 const USER_STORE_ASSIGNMENT_TABLE = 'user_store_assignments';
 const INVENTORY_BALANCE_TABLE = 'inventory_balances';
+
+const REGISTRATION_STATUSES = new Set(['No registrado', 'Registrado', 'Homologado']);
+
+const normalizeRegistrationStatus = (
+    value: unknown,
+    legacyStatus?: unknown
+): 'No registrado' | 'Registrado' | 'Homologado' | string => {
+    const trimmed = String(value ?? '').trim();
+    if (trimmed) return trimmed;
+
+    const legacyTrimmed = String(legacyStatus ?? '').trim();
+    if (REGISTRATION_STATUSES.has(legacyTrimmed)) return legacyTrimmed;
+
+    return 'No registrado';
+};
 const PRODUCT_VARIANT_TABLE = 'product_variants';
 const STOCK_BALANCE_TABLE = 'stock_balances';
 const SERIALIZED_ITEM_TABLE = 'serialized_items';
@@ -398,7 +413,7 @@ const fallbackStores = (): Store[] => {
 };
 
 const mapStoreRow = (row: any): Store => {
-    const name = String(row?.name || 'Tienda');
+    const name = normalizeLocationName(row?.name || DEFAULT_LOCATION_NAMES[0]);
     return {
         id: row.id,
         companyId: row.company_id || undefined,
@@ -411,7 +426,31 @@ const mapStoreRow = (row: any): Store => {
 };
 
 const normalizeName = (value: string | null | undefined): string =>
-    String(value || '').trim().toLowerCase();
+    String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+
+const normalizeLocationName = (value: string | null | undefined): string => {
+    const raw = String(value || '').trim();
+    const normalized = normalizeName(raw);
+
+    if (!normalized) return DEFAULT_LOCATION_NAMES[0];
+    if (normalized === 'tienda' || normalized === 'teinda' || normalized === 'tienda principal') {
+        return DEFAULT_LOCATION_NAMES[0];
+    }
+    if (
+        normalized === 'almacen' ||
+        normalized === 'alamcen' ||
+        normalized === 'almacen principal' ||
+        normalized === 'alamcen principal'
+    ) {
+        return DEFAULT_LOCATION_NAMES[1];
+    }
+
+    return raw;
+};
 
 const inferLegacyLocationForStore = (storeName: string | null | undefined): string | null => {
     const normalized = normalizeName(storeName);
@@ -456,7 +495,7 @@ const mapLegacyLocationToStore = (row: any, index: number): Store => ({
         .replace(/[^A-Z0-9]+/g, '_')
         .replace(/^_+|_+$/g, '')
         .slice(0, 20) || `TIENDA_${String(index + 1).padStart(2, '0')}`,
-    name: row.name,
+    name: normalizeLocationName(row.name),
     type: row.is_sale_point === false ? 'warehouse' : 'store',
     isActive: true,
     isDefault: row.is_default ?? index === 0
@@ -2510,8 +2549,9 @@ export const getProducts = async (options?: ProductQueryOptions): Promise<Produc
         stockQuantity: p.stock_quantity,
         imei1: p.imei_1,           // Mapeo imei_1 -> imei1
         imei2: p.imei_2,           // Mapeo imei_2 -> imei2
-        location: p.location_bin || DEFAULT_LOCATION_NAMES[0], // Compatibilidad UI legacy
-        status: p.status || 'Registrado'
+        location: normalizeLocationName(p.location_bin), // Compatibilidad UI legacy
+        status: p.status || 'available',
+        registrationStatus: normalizeRegistrationStatus(p.registration_status, p.status)
     })) as Product[];
 
     const stockByProduct = new Map<string, number>();
@@ -2572,14 +2612,19 @@ export const getProducts = async (options?: ProductQueryOptions): Promise<Produc
     }
 
     const mappedProducts = baseProducts.map((product) => {
-        // Use stock balance if available, otherwise fallback to the product row stock_quantity (for migrated data)
+        // Use stock balance if available, otherwise fallback to the product row stock_quantity (for migrated data).
+        // Guard: if inventory_balances exists for the product but sums to 0 while products.stock_quantity is > 0,
+        // prefer the legacy stock_quantity to avoid showing everything as 0 when balances weren't backfilled.
         const hasBalance = stockByProduct.has(product.id);
-        const rawStock = hasBalance
-            ? (stockByProduct.get(product.id) || 0)
-            : Number(product.stockQuantity || 0);
+        const legacyStock = Number(product.stockQuantity || 0);
+        const balanceStock = hasBalance ? Number(stockByProduct.get(product.id) || 0) : null;
+        const rawStock = (balanceStock !== null) ? balanceStock : legacyStock;
 
         // Clamp stock to 0 for UI display to avoid negative values from migrated data
-        const computedStock = Math.max(0, rawStock);
+        let computedStock = Math.max(0, rawStock);
+        if (computedStock === 0 && legacyStock > 0) {
+            computedStock = Math.max(0, legacyStock);
+        }
 
         const resolvedStoreId = storeByProduct.get(product.id) || undefined;
         const normalizedProductLocation = normalizeName(product.location);
@@ -2633,7 +2678,7 @@ export const saveProduct = async (product: Partial<Product>): Promise<Product> =
     const normalizedProductName = toTitleCase(product.name);
     const normalizedProductDescription = toNullableSentenceCase(product.description);
     const normalizedProductColor = toNullableTitleCase(product.color);
-    const normalizedProductLocation = toTitleCase(product.location || DEFAULT_LOCATION_NAMES[0]);
+    const normalizedProductLocation = normalizeLocationName(product.location || DEFAULT_LOCATION_NAMES[0]);
     if (normalizedBrandName && normalizedModelName) {
         const { data: brandData } = await supabase.from('brands').select('id').eq('name', normalizedBrandName).single();
         if (brandData) {
@@ -2671,6 +2716,8 @@ export const saveProduct = async (product: Partial<Product>): Promise<Product> =
         throw new Error('No se pudo determinar la empresa activa para guardar el producto. Vuelve a iniciar sesión o valida la tienda activa.');
     }
 
+    const resolvedRegistrationStatus = normalizeRegistrationStatus((product as any).registrationStatus, product.status);
+
     const dbPayload = {
         company_id: resolvedCompanyId,
         supplier_id: product.supplierId || null,
@@ -2689,6 +2736,7 @@ export const saveProduct = async (product: Partial<Product>): Promise<Product> =
         imei_2: product.imei2,
         serial_number: product.serialNumber,
         status: product.status || 'available',
+        registration_status: resolvedRegistrationStatus,
         location_bin: normalizedProductLocation
     };
 
@@ -2701,6 +2749,16 @@ export const saveProduct = async (product: Partial<Product>): Promise<Product> =
     if (error && isMissingColumnError(error, 'supplier_id')) {
         const fallbackPayload = { ...dbPayload } as any;
         delete fallbackPayload.supplier_id;
+        ({ data, error } = await supabase
+            .from('products')
+            .insert([fallbackPayload])
+            .select()
+            .single());
+    }
+
+    if (error && isMissingColumnError(error, 'registration_status')) {
+        const fallbackPayload = { ...dbPayload } as any;
+        delete fallbackPayload.registration_status;
         ({ data, error } = await supabase
             .from('products')
             .insert([fallbackPayload])
@@ -2723,7 +2781,7 @@ export const updateProduct = async (product: Product): Promise<Product> => {
     const normalizedProductName = toTitleCase(product.name);
     const normalizedProductDescription = toNullableSentenceCase(product.description);
     const normalizedProductColor = toNullableTitleCase(product.color);
-    const normalizedProductLocation = toTitleCase(product.location || DEFAULT_LOCATION_NAMES[0]);
+    const normalizedProductLocation = normalizeLocationName(product.location || DEFAULT_LOCATION_NAMES[0]);
     if (normalizedBrandName && normalizedModelName) {
         const { data: brandData } = await supabase.from('brands').select('id').eq('name', normalizedBrandName).single();
         if (brandData) {
@@ -2734,10 +2792,12 @@ export const updateProduct = async (product: Product): Promise<Product> => {
 
     const resolvedPrice = Number(product.price ?? product.sellPrice ?? 0);
     const resolvedMinPrice = Number(product.minPrice ?? product.minSellPrice ?? Math.max(resolvedPrice, 0));
-    const resolvedStock = Number(product.stock ?? product.stockQuantity ?? 0);
+    const stockCandidate = product.stock ?? product.stockQuantity;
+    const resolvedStock = Number(stockCandidate);
+    const hasResolvedStock = stockCandidate !== null && stockCandidate !== undefined && Number.isFinite(resolvedStock);
     const resolvedBuyPrice = Number(product.buyPrice ?? 0);
 
-    const dbPayload = {
+    const dbPayload: Record<string, any> = {
         supplier_id: product.supplierId || null,
         buy_price: Math.max(0, resolvedBuyPrice),
         color: normalizedProductColor,
@@ -2749,7 +2809,6 @@ export const updateProduct = async (product: Product): Promise<Product> => {
         type: mapProductTypeToDb(product.type as any),
         sell_price: resolvedPrice,
         min_sell_price: resolvedMinPrice,
-        stock_quantity: resolvedStock,
         imei_1: product.imei1,
         imei_2: product.imei2,
         serial_number: product.serialNumber,
@@ -2757,6 +2816,14 @@ export const updateProduct = async (product: Product): Promise<Product> => {
         location_bin: normalizedProductLocation,
         updated_at: new Date().toISOString()
     };
+
+    if ((product as any).registrationStatus !== undefined) {
+        dbPayload.registration_status = normalizeRegistrationStatus((product as any).registrationStatus, product.status);
+    }
+
+    if (hasResolvedStock) {
+        dbPayload.stock_quantity = Math.max(0, resolvedStock);
+    }
 
     let { data, error } = await supabase
         .from('products')
@@ -2776,15 +2843,28 @@ export const updateProduct = async (product: Product): Promise<Product> => {
             .single());
     }
 
+    if (error && isMissingColumnError(error, 'registration_status')) {
+        const fallbackPayload = { ...dbPayload } as any;
+        delete fallbackPayload.registration_status;
+        ({ data, error } = await supabase
+            .from('products')
+            .update(fallbackPayload)
+            .eq('id', product.id)
+            .select()
+            .single());
+    }
+
     if (error) throw error;
 
     const previousStoreId = product.storeId || null;
     const storeIdByLocation = await resolveStoreIdByName(product.location || null);
     const resolvedStoreId = storeIdByLocation || previousStoreId;
-    await upsertInventoryBalance(product.id, resolvedStoreId, resolvedStock);
+    if (hasResolvedStock) {
+        await upsertInventoryBalance(product.id, resolvedStoreId, resolvedStock);
+    }
 
     // Si la ubicación cambió de tienda, evita duplicar stock entre origen y destino.
-    if (previousStoreId && resolvedStoreId && previousStoreId !== resolvedStoreId) {
+    if (hasResolvedStock && previousStoreId && resolvedStoreId && previousStoreId !== resolvedStoreId) {
         await supabase
             .from(INVENTORY_BALANCE_TABLE)
             .update({ on_hand: 0 })
@@ -3222,14 +3302,14 @@ export const getLocations = async (): Promise<InventoryLocation[]> => {
 
     return (data || []).map((row: any) => ({
         id: row.id,
-        name: row.name,
+        name: normalizeLocationName(row.name),
         isSalePoint: row.is_sale_point ?? true,
         isDefault: row.is_default ?? false
     }));
 };
 
 export const saveLocation = async (location: Partial<InventoryLocation>): Promise<InventoryLocation> => {
-    const trimmedName = toTitleCase(location.name);
+    const trimmedName = normalizeLocationName(location.name);
     if (!trimmedName) {
         throw new Error('El nombre de la ubicación es obligatorio.');
     }
@@ -4207,7 +4287,8 @@ const fetchSalesRelatedData = async (salesQuery: any, options?: SalesQueryOption
         minPrice: p.min_sell_price,
         minSellPrice: p.min_sell_price,
         stockQuantity: p.stock_quantity,
-        status: p.status || 'Registrado'
+        status: p.status || 'available',
+        registrationStatus: normalizeRegistrationStatus(p.registration_status, p.status)
     }));
 
     const advanceMovements = await fetchAdvanceMovements({
@@ -4324,32 +4405,46 @@ export const getDailyReportData = async (date: string, options?: SalesQueryOptio
     // 1. Definir rango del día en hora local Lima (-05:00)
     const start = `${date}T00:00:00.000-05:00`;
     const end = `${date}T23:59:59.999-05:00`;
-    const scopedCompanyId = getActiveCompanyId();
+    const fallbackStoreIdForCompany = options?.storeId ?? getActiveStoreId();
+    let effectiveCompanyId = String(getActiveCompanyId() || '').trim() || null;
+    if (!effectiveCompanyId && fallbackStoreIdForCompany) {
+        try {
+            effectiveCompanyId = await resolveCompanyIdForStore(fallbackStoreIdForCompany);
+            if (effectiveCompanyId) {
+                setActiveCompanyId(effectiveCompanyId);
+            }
+        } catch {
+            // ignore and continue without company scoping
+        }
+    }
+
     const scopedStoreId = options?.consolidated ? null : (options?.storeId ?? getActiveStoreId());
 
+    const buildDailySalesQuery = (companyId: string | null) => {
+        let query = supabase
+            .from('sales')
+            .select(`
+                *,
+                customer:customers (id, full_name, doc_number, phone, address),
+                seller:profiles!sales_seller_id_fkey (id, full_name, email, username, role, is_active)
+            `)
+            .gte('created_at', start)
+            .lte('created_at', end)
+            .order('created_at', { ascending: false });
+
+        if (companyId) {
+            query = query.eq('company_id', companyId);
+        }
+        if (scopedStoreId) {
+            query = query.eq('store_id', scopedStoreId);
+        }
+        return query;
+    };
+
     // 2. Traer VENTAS con JOINs de cliente y vendedor en una sola consulta
-    let salesQuery = supabase
-        .from('sales')
-        .select(`
-            *,
-            customer:customers (id, full_name, doc_number, phone, address),
-            seller:profiles!sales_seller_id_fkey (id, full_name, email, username, role, is_active)
-        `)
-        .gte('created_at', start)
-        .lte('created_at', end)
-        .order('created_at', { ascending: false });
-
-    if (scopedCompanyId) {
-        salesQuery = salesQuery.eq('company_id', scopedCompanyId);
-    }
-
-    if (scopedStoreId) {
-        salesQuery = salesQuery.eq('store_id', scopedStoreId);
-    }
-
     let salesData: any[] | null = null;
     let salesError: any = null;
-    ({ data: salesData, error: salesError } = await salesQuery);
+    ({ data: salesData, error: salesError } = await buildDailySalesQuery(effectiveCompanyId));
     if (salesError && scopedStoreId && isMissingColumnError(salesError)) {
         let fallbackDailySalesQuery = supabase
             .from('sales')
@@ -4362,14 +4457,37 @@ export const getDailyReportData = async (date: string, options?: SalesQueryOptio
             .lte('created_at', end)
             .order('created_at', { ascending: false });
 
-        if (scopedCompanyId) {
-            fallbackDailySalesQuery = fallbackDailySalesQuery.eq('company_id', scopedCompanyId);
+        if (effectiveCompanyId) {
+            fallbackDailySalesQuery = fallbackDailySalesQuery.eq('company_id', effectiveCompanyId);
         }
 
         ({ data: salesData, error: salesError } = await fallbackDailySalesQuery);
     }
 
+    // If company filter returns empty, try to re-resolve company from store and retry once.
+    if (!salesError && (salesData || []).length === 0 && fallbackStoreIdForCompany) {
+        try {
+            const resolvedCompanyId = await resolveCompanyIdForStore(fallbackStoreIdForCompany);
+            const normalizedResolved = String(resolvedCompanyId || '').trim();
+            const normalizedCurrent = String(effectiveCompanyId || '').trim();
+            if (normalizedResolved && normalizedResolved !== normalizedCurrent) {
+                effectiveCompanyId = normalizedResolved;
+                setActiveCompanyId(effectiveCompanyId);
+                ({ data: salesData, error: salesError } = await buildDailySalesQuery(effectiveCompanyId));
+            }
+        } catch {
+            // ignore
+        }
+    }
+
     if (salesError) throw salesError;
+
+    // If company scoping yields no sales, retry without company filter (common when migrated rows have company_id NULL).
+    if (!salesError && effectiveCompanyId && (salesData || []).length === 0) {
+        ({ data: salesData, error: salesError } = await buildDailySalesQuery(null));
+        if (salesError) throw salesError;
+        effectiveCompanyId = null;
+    }
 
     const sales = (salesData || []).map((s: any) => ({
         id: s.id,
@@ -4420,8 +4538,8 @@ export const getDailyReportData = async (date: string, options?: SalesQueryOptio
         .gte('payment_date', start)
         .lte('payment_date', end);
 
-    if (scopedCompanyId) {
-        paymentsQuery = paymentsQuery.eq('company_id', scopedCompanyId);
+    if (effectiveCompanyId) {
+        paymentsQuery = paymentsQuery.eq('company_id', effectiveCompanyId);
     }
 
     if (scopedStoreId) {
@@ -4460,6 +4578,25 @@ export const getDailyReportData = async (date: string, options?: SalesQueryOptio
 
     if (paymentsError) throw paymentsError;
 
+    // If there are sales but payment_date range returns nothing, fallback to payments by sale_id.
+    if ((paymentsData || []).length === 0 && saleIds.length > 0) {
+        try {
+            paymentsData = await selectBySaleIdsInBatches(
+                'sale_payments',
+                `
+                    *,
+                    sales (
+                        invoice_number,
+                        customers (full_name)
+                    )
+                `,
+                saleIds
+            );
+        } catch {
+            // keep empty
+        }
+    }
+
     const rawDailyPayments: PaymentDetail[] = (paymentsData || []).map((p: any) => ({
         id: p.id,
         saleId: p.sale_id,
@@ -4497,13 +4634,14 @@ export const getDailyReportData = async (date: string, options?: SalesQueryOptio
         minPrice: p.min_sell_price,
         minSellPrice: p.min_sell_price,
         stockQuantity: p.stock_quantity,
-        status: p.status || 'Registrado'
+        status: p.status || 'available',
+        registrationStatus: normalizeRegistrationStatus(p.registration_status, p.status)
     }));
 
     // 6. Preparar VENDEDORES únicos (vía profiles)
     let dailyProfilesQuery = supabase.from('profiles').select('*').eq('is_active', true);
-    if (scopedCompanyId) {
-        dailyProfilesQuery = dailyProfilesQuery.eq('company_id', scopedCompanyId);
+    if (effectiveCompanyId) {
+        dailyProfilesQuery = dailyProfilesQuery.eq('company_id', effectiveCompanyId);
     }
     const { data: profilesData } = await dailyProfilesQuery;
     const users = (profilesData || []).map((p: any) => ({

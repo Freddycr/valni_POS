@@ -3,7 +3,7 @@ import { getProducts, getLocations } from '../services/api';
 import { Product, InventoryLocation, Store } from '../types';
 import { formatCurrency } from '../utils/formatting';
 
-const LOCATION_FALLBACKS = ['Tienda', 'Almacen'];
+const LOCATION_FALLBACKS = ['TIENDA PRINCIPAL', 'ALMACEN PRINCIPAL'];
 
 interface InventoryScreenProps {
     activeStoreId?: string;
@@ -233,10 +233,18 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ activeStoreId, stores
                                 </td>
                                 <td className="td-style text-[#11d483] font-bold text-right">{formatCurrency(product.sellPrice || 0)}</td>
                                 <td className="td-style">
-                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${product.status === 'Registrado' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-                                        }`}>
-                                        {product.status?.toUpperCase() || 'N/A'}
-                                    </span>
+                                    {(() => {
+                                        const reg = String((product as any).registrationStatus || '').trim();
+                                        const legacy = String((product as any).status || '').trim();
+                                        const value = reg || (['No registrado', 'Registrado', 'Homologado'].includes(legacy) ? legacy : 'No registrado');
+                                        const isRegistered = value === 'Registrado';
+                                        return (
+                                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${isRegistered ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                                                }`}>
+                                                {value.toUpperCase()}
+                                            </span>
+                                        );
+                                    })()}
                                 </td>
                             </tr>
                         ))}
